@@ -19,3 +19,8 @@
          "Week">
 <!ENTITY qfb-pivot.expando.time.month.label
          "Month">
+
+<!ENTITY qfb-pivot.email.label
+         "Pivot">
+<!ENTITY qfb-pivot.email.accesskey
+         "P">

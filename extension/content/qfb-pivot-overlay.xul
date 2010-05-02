@@ -87,4 +87,11 @@
                      type="checkbox"/>
     </hbox>
   </hbox>
+
+  <popup id="emailAddressPopup">
+    <menuseparator/>
+    <menuitem id="qfb-pivot-email-pivot"
+              label="&qfb-pivot.email.label;"
+              accesskey="&qfb-pivot.email.accesskey;"/>
+  </popup>
 </overlay>
