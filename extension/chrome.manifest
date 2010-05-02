@@ -1,0 +1,4 @@
+content	qfb-pivot	content/
+locale	qfb-pivot	en-US	locale/en-US/
+skin	qfp-pivot	classic/1.0	skin/
+overlay	chrome://messenger/content/messenger.xul	chrome://qfb-pivot/content/qfb-pivot-overlay.xul

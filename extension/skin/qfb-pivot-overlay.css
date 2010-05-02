@@ -1,0 +1,9 @@
+#qfb-pivot {
+  list-style-image: url("chrome://qfb-pivot/skin/pivot-icon.png");
+}
+
+#qfb-pivot-sender-group-label,
+#qfb-pivot-recipients-group-label,
+#qfb-pivot-time-group-label {
+  color: GrayText;
+}
