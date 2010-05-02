@@ -78,13 +78,13 @@
              value="&qfb-pivot.expando.timeGroup.label;"/>
       <toolbarbutton id="qfb-pivot-time-day"
                      label="&qfb-pivot.expando.time.day.label;"
-                     type="check"/>
+                     type="checkbox"/>
       <toolbarbutton id="qfb-pivot-time-week"
                      label="&qfb-pivot.expando.time.week.label;"
-                     type="check"/>
+                     type="checkbox"/>
       <toolbarbutton id="qfb-pivot-time-month"
                      label="&qfb-pivot.expando.time.month.label;"
-                     type="check"/>
+                     type="checkbox"/>
     </hbox>
   </hbox>
 </overlay>

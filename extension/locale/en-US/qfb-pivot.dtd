@@ -1,15 +1,15 @@
 <!ENTITY qfb-pivot.pivot.label
          "Pivot">
 <!ENTITY qfb-pivot.pivot.tooltip
-         "Filter messages based on the current message, which we latch">
+         "Filter messages based on the selected message(s), which we latch">
 <!ENTITY qfb-pivot.expando.senderGroup.label
          "Sender:">
 <!ENTITY qfb-pivot.expando.recipientsGroup.label
          "Recipients:">
 <!ENTITY qfb-pivot.expando.sender.label
-         "Sender">
+         "From">
 <!ENTITY qfb-pivot.expando.recipient.label
-         "Recipient">
+         "To/CC">
 
 <!ENTITY qfb-pivot.expando.timeGroup.label
          "Sent within a:">
