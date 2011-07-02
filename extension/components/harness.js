@@ -20,6 +20,7 @@
  * Contributor(s):
  *  Dan Mills <thunder@mozilla.com>
  *  Atul Varma <atul@mozilla.com>
+ *  Drew Willcoxon <adw@mozilla.com>
  *
  * Alternatively, the contents of this file may be used under the terms of
  * either the GNU General Public License Version 2 or later (the "GPL"), or
@@ -39,8 +40,7 @@
 // program.
 //
 // The main entry point, `NSGetModule()`, is data-driven, and obtains
-// a lot of its configuration information from either the
-// `HARNESS_OPTIONS` environment variable (if present) or a JSON file
+// a lot of its configuration information from a JSON file
 // called `harness-options.json` in the root directory of the extension
 // or application it's a part of.
 //
@@ -50,6 +50,10 @@
 // program's CommonJS environment. It's also the main mechanism through
 // which other parts of the application can communicate with the Jetpack
 // program.
+// 
+// If we're on Gecko 1.9.3, which supports rebootless extensions, the
+// bootstrap.js file actually evaluates this file and calls parts of
+// it automatically.
 // 
 // It should be noted that a lot of what's done by the Harness Service is
 // very similar to what's normally done by a `chrome.manifest` file: the
@@ -93,6 +97,10 @@ const FENNEC_ID = "{a23983c0-fd0e-11dc-95ff-0800200c9a66}";
 
 function buildHarnessService(rootFileSpec, dump, logError,
                              onQuit, options) {
+  if (arguments.length == 1) {
+    ({dump, logError, onQuit, options}) = getDefaults(rootFileSpec);
+  }
+
   // The loader for securable modules, typically a Cuddlefish loader.
   var loader;
 
@@ -104,6 +112,9 @@ function buildHarnessService(rootFileSpec, dump, logError,
 
   // Whether we've been asked to quit or not yet.
   var isQuitting;
+
+  // The Jetpack program's main module.
+  var program;
 
   var ioService = Cc["@mozilla.org/network/io-service;1"]
                   .getService(Ci.nsIIOService);
@@ -149,6 +160,8 @@ function buildHarnessService(rootFileSpec, dump, logError,
   }
 
   function buildLoader() {
+    // TODO: This variable doesn't seem to be used, we should
+    // be able to remove it.
     var compMgr = Components.manager;
     compMgr = compMgr.QueryInterface(Ci.nsIComponentRegistrar);
 
@@ -171,6 +184,10 @@ function buildHarnessService(rootFileSpec, dump, logError,
     var packaging = new Packaging();
     var loader = new jsm.Loader({rootPaths: options.rootPaths.slice(),
                                  print: dump,
+                                 packaging: packaging,
+                                 metadata: options.metadata,
+                                 uriPrefix: options.uriPrefix,
+                                 name: options.name,
                                  globals: { packaging: packaging }
                                 });
     packaging.__setLoader(loader);
@@ -181,6 +198,7 @@ function buildHarnessService(rootFileSpec, dump, logError,
   // modules loaded within our loader.
 
   function Packaging() {
+    this.__packages = options.manifest;
   }
 
   Packaging.prototype = {
@@ -204,18 +222,15 @@ function buildHarnessService(rootFileSpec, dump, logError,
       return options;
     },
 
-    jetpackID: options.jetpackID,
+    enableE10s: options.enable_e10s,
 
-    getURLForData: function getURLForData(path) {
-      var traceback = this.__loader.require("traceback");
-      var callerInfo = traceback.get().slice(-2)[0];
-      var url = this.__loader.require("url");
-      var info = url.parse(callerInfo.filename);
-      var pkgName = options.resourcePackages[info.host];
-      if (pkgName in options.packageData)
-        return url.resolve(options.packageData[pkgName], path);
-      else
-        throw new Error("No data for package " + pkgName);
+    jetpackID: options.jetpackID,
+    uriPrefix: options.uriPrefix,
+
+    bundleID: options.bundleID,
+
+    getModuleInfo: function getModuleInfo(path) {
+      return this.__packages[path];
     },
 
     createLoader: function createLoader() {
@@ -240,7 +255,7 @@ function buildHarnessService(rootFileSpec, dump, logError,
 
     get classID() { return Components.ID(options.bootstrap.classID); },
 
-    _xpcom_categories: [{ category: "app-startup", service: true }],
+    _xpcom_categories: [{ category: "profile-after-change" }],
 
     _xpcom_factory: {
       get singleton() {
@@ -269,7 +284,7 @@ function buildHarnessService(rootFileSpec, dump, logError,
       return options;
     },
 
-    load: function Harness_load() {
+    load: function Harness_load(reason) {
       if (isStarted)
         return;
 
@@ -278,8 +293,11 @@ function buildHarnessService(rootFileSpec, dump, logError,
       if (options.main) {
         try {
 
-          var program = this.loader.require(options.main);
-          program.main(options, {quit: quit, print: dump});
+          if (reason)
+            options.loadReason = reason;
+          program = this.loader.require(options.main);
+          if ('main' in program)
+            program.main(options, {quit: quit, print: dump});
 
           // Send application readiness notification
           const APP_READY_TOPIC = options.jetpackID + "_APPLICATION_READY";
@@ -292,7 +310,7 @@ function buildHarnessService(rootFileSpec, dump, logError,
       }
     },
 
-    unload: function Harness_unload() {
+    unload: function Harness_unload(reason) {
       if (!isStarted)
         return;
 
@@ -300,8 +318,26 @@ function buildHarnessService(rootFileSpec, dump, logError,
       harnessService = null;
 
       obSvc.removeObserver(this, "quit-application-granted");
+
+      lifeCycleObserver192.unload();
+
+      // Notify the program of unload.
+      if (program) {
+        if (typeof(program.onUnload) === "function") {
+          try {
+            program.onUnload(reason);
+          }
+          catch (err) {
+            if (loader)
+              loader.console.exception(err);
+          }
+        }
+        program = null;
+      }
+
+      // Notify the loader of unload.
       if (loader) {
-        loader.unload();
+        loader.unload(reason);
         loader = null;
       }
 
@@ -312,7 +348,7 @@ function buildHarnessService(rootFileSpec, dump, logError,
     observe: function Harness_observe(subject, topic, data) {
       try {
         switch (topic) {
-        case "app-startup":
+        case "profile-after-change":
           var appInfo = Cc["@mozilla.org/xre/app-info;1"]
                         .getService(Ci.nsIXULAppInfo);
           switch (appInfo.ID) {
@@ -327,15 +363,16 @@ function buildHarnessService(rootFileSpec, dump, logError,
             obSvc.addObserver(this, "final-ui-startup", true);
             break;
           }
+          lifeCycleObserver192.init(options.bundleID, logError);
           break;
         case "final-ui-startup": // XULRunner
         case "sessionstore-windows-restored": // Firefox
         case "xul-window-visible": // Thunderbird, Fennec
           obSvc.removeObserver(this, topic);
-          this.load();
+          this.load(lifeCycleObserver192.loadReason || "startup");
           break;
         case "quit-application-granted":
-          this.unload();
+          this.unload(lifeCycleObserver192.unloadReason || "shutdown");
           quit("OK");
           break;
         }
@@ -360,9 +397,10 @@ function defaultLogError(e, print) {
   if (!print)
     print = dump;
 
-  print(e + " (" + e.fileName + ":" + e.lineNumber + ")\n");
+  var level = "error";
+  print(e + " (" + e.fileName + ":" + e.lineNumber + ")\n", level);
   if (e.stack)
-    print("stack:\n" + e.stack + "\n");
+    print("stack:\n" + e.stack + "\n", level);
 }
 
 // Builds an onQuit() function that writes a result file if necessary
@@ -409,6 +447,44 @@ function buildDevQuit(options, dump) {
   };
 }
 
+function buildForsakenConsoleDump(dump) {
+  var buffer = "";
+  var cService = Cc['@mozilla.org/consoleservice;1'].getService()
+                 .QueryInterface(Ci.nsIConsoleService);
+
+  function stringify(arg) {
+    try {
+      return String(arg);
+    }
+    catch(ex) {
+      return "<toString() error>";
+    }
+  }
+
+  return function forsakenConsoleDump(msg, level) {
+    // No harm in calling dump() just in case the
+    // end-user *can* see the console...
+    dump(msg);
+
+    msg = stringify(msg);
+    if (msg.indexOf('\n') >= 0) {
+      var str = buffer + msg;
+      if (level === "error") {
+        var err = Cc["@mozilla.org/scripterror;1"]
+                  .createInstance(Ci.nsIScriptError);
+        str = str.replace(/^error: /, "");
+        err.init(str, null, null, 0, 0, 0, "Add-on SDK");
+        cService.logMessage(err);
+      }
+      else
+        cService.logStringMessage(str);
+      buffer = "";
+    } else {
+      buffer += msg;
+    }
+  };
+}
+
 function getDefaults(rootFileSpec) {
   // Default options to pass back.
   var options;
@@ -418,25 +494,23 @@ function getDefaults(rootFileSpec) {
                   .getService(Ci.nsIEnvironment);
 
     var jsonData;
-    if (environ.exists("HARNESS_OPTIONS"))
-      jsonData = environ.get("HARNESS_OPTIONS");
+    var optionsFile = rootFileSpec.clone();
+    optionsFile.append('harness-options.json');
+    if (optionsFile.exists()) {
+      var fiStream = Cc['@mozilla.org/network/file-input-stream;1']
+                     .createInstance(Ci.nsIFileInputStream);
+      var siStream = Cc['@mozilla.org/scriptableinputstream;1']
+                     .createInstance(Ci.nsIScriptableInputStream);
+      fiStream.init(optionsFile, 1, 0, false);
+      siStream.init(fiStream);
+      var data = new String();
+      data += siStream.read(-1);
+      siStream.close();
+      fiStream.close();
+      jsonData = data;
+    }
     else {
-      var optionsFile = rootFileSpec.clone();
-      optionsFile.append('harness-options.json');
-      if (optionsFile.exists()) {
-        var fiStream = Cc['@mozilla.org/network/file-input-stream;1']
-                       .createInstance(Ci.nsIFileInputStream);
-        var siStream = Cc['@mozilla.org/scriptableinputstream;1']
-                       .createInstance(Ci.nsIScriptableInputStream);
-        fiStream.init(optionsFile, 1, 0, false);
-        siStream.init(fiStream);
-        var data = new String();
-        data += siStream.read(-1);
-        siStream.close();
-        fiStream.close();
-        jsonData = data;
-      } else
-        throw new Error("HARNESS_OPTIONS env var must exist.");
+      throw new Error("harness-options.json file must exist.");
     }
 
     options = JSON.parse(jsonData);
@@ -446,6 +520,7 @@ function getDefaults(rootFileSpec) {
   }
 
   var onQuit = function() {};
+  var doDump = buildForsakenConsoleDump(dump);
 
   if ('resultFile' in options)
     onQuit = buildDevQuit(options, print);
@@ -463,8 +538,8 @@ function getDefaults(rootFileSpec) {
     logStream.init(logFile, -1, -1, 0);
   }
 
-  function print(msg) {
-    dump(msg);
+  function print(msg, level) {
+    doDump(msg, level);
     if (logStream && typeof(msg) == "string") {
       logStream.write(msg, msg.length);
       logStream.flush();
@@ -479,13 +554,108 @@ function getDefaults(rootFileSpec) {
           logError: logError};
 }
 
+// Gecko 2, entry point for non-bootstrapped extensions (which register this
+// component via chrome.manifest.)
+// FIXME: no install/uninstall notifications on 2.0 for non-bootstrapped addons
+function NSGetFactory(cid) {
+  try {
+    if (!NSGetFactory.fn) {
+      var rootFileSpec = __LOCATION__.parent.parent;
+      var HarnessService = buildHarnessService(rootFileSpec);
+      NSGetFactory.fn = XPCOMUtils.generateNSGetFactory([HarnessService]);
+    }
+  } catch(e) {
+    Components.utils.reportError(e);
+    dump(e);
+    throw e;
+  }
+  return NSGetFactory.fn(cid);
+}
+
+// Everything below is only used on Gecko 1.9.2 or below.
+
 function NSGetModule(compMgr, fileSpec) {
   var rootFileSpec = fileSpec.parent.parent;
-  var defaults = getDefaults(rootFileSpec);
-  var HarnessService = buildHarnessService(rootFileSpec,
-                                           defaults.dump,
-                                           defaults.logError,
-                                           defaults.onQuit,
-                                           defaults.options);
+  var HarnessService = buildHarnessService(rootFileSpec);
   return XPCOMUtils.generateModule([HarnessService]);
 }
+
+// Program life-cycle events originate in bootstrap.js on 1.9.3.  But 1.9.2
+// doesn't use bootstrap.js, so we need to do a little extra work there to
+// determine the reasons for app startup and shutdown.  That's what this
+// singleton is for.  On 1.9.3 all methods are no-ops.
+var lifeCycleObserver192 = {
+  get loadReason() {
+    if (this._inited) {
+      // If you change these names, change them in bootstrap.js too.
+      if (this._addonIsNew)
+        return "install";
+      return "startup";
+    }
+    return undefined;
+  },
+
+  get unloadReason() {
+    if (this._inited) {
+      // If you change these names, change them in bootstrap.js too.
+      switch (this._emState) {
+      case "item-uninstalled":
+        return "uninstall";
+      case "item-disabled":
+        return "disable";
+      }
+      return "shutdown";
+    }
+    return undefined;
+  },
+
+  // This must be called first to initialize the singleton.  It must be called
+  // on profile-after-change.
+  init: function lifeCycleObserver192_init(bundleID, logError) {
+    // This component is present in 1.9.2 but not 2.0.
+    if ("@mozilla.org/extensions/manager;1" in Cc && !this._inited) {
+      obSvc.addObserver(this, "em-action-requested", true);
+      this._bundleID = bundleID;
+      this._logError = logError;
+      this._inited = true;
+
+      try {
+        // This throws if the pref doesn't exist, which is the case when no
+        // new add-ons were installed.
+        var addonIdStr = Cc["@mozilla.org/preferences-service;1"].
+                         getService(Ci.nsIPrefBranch).
+                         getCharPref("extensions.newAddons");
+      }
+      catch (err) {}
+      if (addonIdStr) {
+        var addonIds = addonIdStr.split(",");
+        this._addonIsNew = addonIds.indexOf(this._bundleID) >= 0;
+      }
+    }
+  },
+
+  unload: function lifeCycleObserver192_unload() {
+    if (this._inited && !this._unloaded) {
+      obSvc.removeObserver(this, "em-action-requested");
+      delete this._logError;
+      this._unloaded = true;
+    }
+  },
+
+  observe: function lifeCycleObserver192_observe(subj, topic, data) {
+    try {
+      if (topic === "em-action-requested") {
+        if (subj instanceof Ci.nsIUpdateItem && subj.id === this._bundleID)
+          this._emState = data;
+      }
+    }
+    catch (err) {
+      this._logError(err);
+    }
+  },
+
+  QueryInterface: XPCOMUtils.generateQI([
+    Ci.nsIObserver,
+    Ci.nsISupportsWeakReference,
+  ])
+};
