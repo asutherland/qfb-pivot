@@ -1,5 +1,7 @@
 {
   "id": "qfb-pivot@mozillamessaging.com",
   "description": "Quick Filter Bar Pivot extension",
-  "author": "Andrew Sutherland <asutherland@asutherland.org>"
+  "author": "Andrew Sutherland <asutherland@asutherland.org>",
+  "license": "MPL 1.1/GPL 2.0/LGPL 2.1",
+  "version": "1.1"
 }

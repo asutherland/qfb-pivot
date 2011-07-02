@@ -37,5 +37,5 @@
 // Trigger our module to get loaded.
 Components.classes[
   "@mozilla.org/harness-service;1?id=qfb-pivot@mozillamessaging.com"].
-  getService().wrappedJSObject.loader.require("qfb-pivot");
+  getService().wrappedJSObject.loader.require("main");
 

@@ -2,3 +2,6 @@ content	qfb-pivot	content/
 locale	qfb-pivot	en-US	locale/en-US/
 skin	qfb-pivot	classic/1.0	skin/
 overlay	chrome://messenger/content/messenger.xul	chrome://qfb-pivot/content/qfb-pivot-overlay.xul
+
+component {71ecd279-12e7-4ec5-b4fe-879051dfe792} components/harness.js
+contract @mozilla.org/harness-service;1?id=qfb-pivot@mozillamessaging.com {71ecd279-12e7-4ec5-b4fe-879051dfe792}
