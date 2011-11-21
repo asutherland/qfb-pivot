@@ -1,0 +1,26 @@
+<!ENTITY qfb-pivot.pivot.label
+         "Pivot">
+<!ENTITY qfb-pivot.pivot.tooltip
+         "Liste auf Basis der ausgewählten Nachricht(en) filtern">
+<!ENTITY qfb-pivot.expando.senderGroup.label
+         "Absender:">
+<!ENTITY qfb-pivot.expando.recipientsGroup.label
+         "Empfänger:">
+<!ENTITY qfb-pivot.expando.sender.label
+         "Von">
+<!ENTITY qfb-pivot.expando.recipient.label
+         "An/CC">
+
+<!ENTITY qfb-pivot.expando.timeGroup.label
+         "Gesendet innerhalb:">
+<!ENTITY qfb-pivot.expando.time.day.label
+         "1 Tag">
+<!ENTITY qfb-pivot.expando.time.week.label
+         "1 Woche">
+<!ENTITY qfb-pivot.expando.time.month.label
+         "1 Monat">
+
+<!ENTITY qfb-pivot.email.label
+         "Pivot">
+<!ENTITY qfb-pivot.email.accesskey
+         "P">
