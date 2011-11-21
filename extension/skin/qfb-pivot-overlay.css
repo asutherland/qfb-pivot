@@ -1,5 +1,5 @@
 #qfb-pivot {
-  list-style-image: url("chrome://qfb-pivot/skin/pivot-icon.png");
+  list-style-image: url("chrome://qfb-pivot/skin/pivot-icon.png") !important;
 }
 
 #qfb-pivot-sender-group-label,
